@@ -168,6 +168,13 @@ export default function ShipmentDetailPage() {
                     </Badge>
                     <Button
                         variant="outline"
+                        onClick={() => router.push(`/admin/shipments/${id}/edit`)}
+                        className="border-emerald-700 text-emerald-400 hover:bg-emerald-500/10"
+                    >
+                        ✏️ Editar
+                    </Button>
+                    <Button
+                        variant="outline"
                         onClick={() => router.push('/admin/shipments')}
                         className="border-zinc-700 text-zinc-400"
                     >
@@ -188,10 +195,10 @@ export default function ShipmentDetailPage() {
                                 <div key={status} className="flex items-center flex-1">
                                     <div className="flex flex-col items-center">
                                         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all ${isCurrent
-                                                ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400/50'
-                                                : isCompleted
-                                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                                    : 'bg-zinc-800 text-zinc-500'
+                                            ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400/50'
+                                            : isCompleted
+                                                ? 'bg-emerald-500/20 text-emerald-400'
+                                                : 'bg-zinc-800 text-zinc-500'
                                             }`}>
                                             {statusIcons[status]}
                                         </div>
