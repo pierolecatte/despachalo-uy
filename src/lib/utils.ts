@@ -64,14 +64,14 @@ export function getStatusLabel(status: string): string {
  */
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
-    pendiente: 'bg-yellow-100 text-yellow-800',
-    levantado: 'bg-blue-100 text-blue-800',
-    despachado: 'bg-indigo-100 text-indigo-800',
-    en_transito: 'bg-purple-100 text-purple-800',
-    entregado: 'bg-green-100 text-green-800',
-    con_problema: 'bg-red-100 text-red-800',
+    pendiente: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    levantado: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    despachado: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+    en_transito: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    entregado: 'bg-green-500/10 text-green-400 border-green-500/20',
+    con_problema: 'bg-red-500/10 text-red-400 border-red-500/20',
   }
-  return colors[status] || 'bg-gray-100 text-gray-800'
+  return colors[status] || 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20'
 }
 
 /**
