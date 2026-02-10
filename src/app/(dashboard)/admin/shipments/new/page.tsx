@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { generateTrackingCode } from '@/lib/utils'
+import QRCode from 'qrcode'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -114,15 +115,36 @@ export default function NewShipmentPage() {
             shipping_cost: parseFloat(formData.get('shipping_cost') as string) || null,
         }
 
-        const { error: insertError } = await supabase.from('shipments').insert(shipmentData)
+        const { data: inserted, error: insertError } = await supabase
+            .from('shipments')
+            .insert(shipmentData)
+            .select('id, tracking_code')
+            .single()
 
-        if (insertError) {
-            setError(insertError.message)
+        if (insertError || !inserted) {
+            setError(insertError?.message || 'Error al crear envío')
             setSaving(false)
             return
         }
 
-        router.push('/admin/shipments')
+        // Generate QR code pointing to public tracking URL
+        try {
+            const trackingUrl = `${window.location.origin}/tracking?code=${inserted.tracking_code}`
+            const qrDataUrl = await QRCode.toDataURL(trackingUrl, {
+                width: 300,
+                margin: 2,
+                color: { dark: '#000000', light: '#ffffff' },
+            })
+            await supabase
+                .from('shipments')
+                .update({ qr_code_url: qrDataUrl })
+                .eq('id', inserted.id)
+        } catch {
+            // QR generation failure is non-blocking
+            console.error('QR generation failed')
+        }
+
+        router.push(`/admin/shipments/${inserted.id}`)
     }
 
     return (

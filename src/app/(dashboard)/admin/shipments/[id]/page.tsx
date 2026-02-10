@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import ShipmentFiles from '@/components/shipments/shipment-files'
 
 interface ShipmentDetail {
     id: string
@@ -38,6 +39,7 @@ interface ShipmentDetail {
     remitente_org_id: string
     cadeteria_org_id: string | null
     agencia_org_id: string | null
+    qr_code_url: string | null
 }
 
 interface ShipmentEvent {
@@ -297,6 +299,40 @@ export default function ShipmentDetailPage() {
                         <InfoRow label="Entregado" value={shipment.delivered_at ? formatDateUY(shipment.delivered_at) : null} />
                     </CardContent>
                 </Card>
+            </div>
+
+            {/* QR Code + Files row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* QR Code */}
+                <Card className="bg-zinc-900/80 border-zinc-800">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base text-zinc-200">📱 Código QR</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center">
+                        {shipment.qr_code_url ? (
+                            <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={shipment.qr_code_url}
+                                    alt={`QR ${shipment.tracking_code}`}
+                                    className="w-40 h-40 rounded-lg bg-white p-1"
+                                />
+                                <p className="text-xs text-zinc-500 mt-2 text-center">
+                                    Escaneá para ver el tracking público
+                                </p>
+                            </>
+                        ) : (
+                            <p className="text-xs text-zinc-500 py-8 text-center">
+                                QR no disponible
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Files */}
+                <div className="lg:col-span-2">
+                    <ShipmentFiles shipmentId={shipment.id} />
+                </div>
             </div>
 
             {/* Timeline */}

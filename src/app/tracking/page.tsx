@@ -23,6 +23,7 @@ interface TrackingResult {
     dispatched_at: string | null
     delivered_at: string | null
     remitente_org_id: string
+    qr_code_url: string | null
 }
 
 interface TrackingEvent {
@@ -70,7 +71,7 @@ export default function TrackingPage() {
 
         const { data: shipment } = await supabase
             .from('shipments')
-            .select('id, tracking_code, status, recipient_name, recipient_address, recipient_department, recipient_city, delivery_type, package_size, package_count, description, created_at, pickup_at, dispatched_at, delivered_at, remitente_org_id')
+            .select('id, tracking_code, status, recipient_name, recipient_address, recipient_department, recipient_city, delivery_type, package_size, package_count, description, created_at, pickup_at, dispatched_at, delivered_at, remitente_org_id, qr_code_url')
             .eq('tracking_code', trackingCode.trim().toUpperCase())
             .single()
 
@@ -214,10 +215,10 @@ export default function TrackingPage() {
                                                 <div key={status} className="flex items-center flex-1">
                                                     <div className="flex flex-col items-center">
                                                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl transition-all ${isCurrent
-                                                                ? `${cfg.bgColor} shadow-lg ring-2 ring-offset-2 ring-offset-zinc-900 ring-${cfg.bgColor.replace('bg-', '')}/40`
-                                                                : isCompleted
-                                                                    ? `${cfg.bgColor}/20 ${cfg.color}`
-                                                                    : 'bg-zinc-800 text-zinc-600'
+                                                            ? `${cfg.bgColor} shadow-lg ring-2 ring-offset-2 ring-offset-zinc-900 ring-${cfg.bgColor.replace('bg-', '')}/40`
+                                                            : isCompleted
+                                                                ? `${cfg.bgColor}/20 ${cfg.color}`
+                                                                : 'bg-zinc-800 text-zinc-600'
                                                             }`}>
                                                             {cfg.icon}
                                                         </div>
@@ -303,6 +304,20 @@ export default function TrackingPage() {
                                         <DateItem label="Entregado" date={result.delivered_at} />
                                     </div>
                                 </div>
+
+                                {/* QR Code */}
+                                {result.qr_code_url && (
+                                    <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 flex flex-col items-center">
+                                        <h3 className="text-lg font-semibold text-zinc-200 mb-4 self-start">📱 Código QR</h3>
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={result.qr_code_url}
+                                            alt={`QR ${result.tracking_code}`}
+                                            className="w-36 h-36 rounded-lg bg-white p-1"
+                                        />
+                                        <p className="text-xs text-zinc-500 mt-2">Escaneá para compartir</p>
+                                    </div>
+                                )}
 
                                 {/* Share */}
                                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6">
