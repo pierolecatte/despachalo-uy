@@ -89,6 +89,9 @@ export interface Database {
                     distance_km: number | null
                     hours_worked: number | null
                     notes: string | null
+                    recipient_observations: string | null
+                    recipient_lat: number | null
+                    recipient_lng: number | null
                     pickup_at: string | null
                     dispatched_at: string | null
                     delivered_at: string | null

@@ -9,6 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import dynamic from 'next/dynamic'
+
+const AddressMapPicker = dynamic(
+    () => import('@/components/shipments/address-map-picker'),
+    { ssr: false, loading: () => <div className="w-full h-[250px] bg-zinc-800/50 rounded-lg animate-pulse" /> }
+)
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -62,6 +68,8 @@ export default function NewShipmentPage() {
     const [selectedDepartment, setSelectedDepartment] = useState('')
     const [selectedDeliveryType, setSelectedDeliveryType] = useState('domicilio')
     const [selectedSize, setSelectedSize] = useState('mediano')
+    const [recipientLat, setRecipientLat] = useState<number | null>(null)
+    const [recipientLng, setRecipientLng] = useState<number | null>(null)
 
     const isDespachoAgencia = selectedServiceCode === 'despacho_agencia'
 
@@ -113,6 +121,9 @@ export default function NewShipmentPage() {
             description: (formData.get('description') as string) || null,
             notes: (formData.get('notes') as string) || null,
             shipping_cost: parseFloat(formData.get('shipping_cost') as string) || null,
+            recipient_observations: (formData.get('recipient_observations') as string) || null,
+            recipient_lat: recipientLat,
+            recipient_lng: recipientLng,
         }
 
         const { data: inserted, error: insertError } = await supabase
@@ -328,6 +339,23 @@ export default function NewShipmentPage() {
                                     placeholder="Ciudad"
                                 />
                             </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-zinc-300">Observaciones</Label>
+                            <Textarea
+                                name="recipient_observations"
+                                className="bg-zinc-800/50 border-zinc-700 text-zinc-100 min-h-[60px]"
+                                placeholder="Ej: Timbre no funciona, golpear puerta, dejar en portería..."
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-zinc-300">🗺️ Ubicación en el mapa</Label>
+                            <AddressMapPicker
+                                onLocationSelect={(lat, lng) => {
+                                    setRecipientLat(lat || null)
+                                    setRecipientLng(lng || null)
+                                }}
+                            />
                         </div>
                     </CardContent>
                 </Card>

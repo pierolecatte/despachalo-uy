@@ -13,6 +13,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import dynamic from 'next/dynamic'
+
+const AddressMapPicker = dynamic(
+    () => import('@/components/shipments/address-map-picker'),
+    { ssr: false, loading: () => <div className="w-full h-[250px] bg-zinc-800/50 rounded-lg animate-pulse" /> }
+)
 
 interface Organization {
     id: string
@@ -46,6 +52,9 @@ interface ShipmentRow {
     description: string | null
     notes: string | null
     shipping_cost: number | null
+    recipient_observations: string | null
+    recipient_lat: number | null
+    recipient_lng: number | null
     created_at: string
 }
 
@@ -93,6 +102,8 @@ export default function EditShipmentPage({ params }: { params: Promise<{ id: str
     const [deliveryType, setDeliveryType] = useState('domicilio')
     const [packageSize, setPackageSize] = useState('mediano')
     const [department, setDepartment] = useState('')
+    const [recipientLat, setRecipientLat] = useState<number | null>(null)
+    const [recipientLng, setRecipientLng] = useState<number | null>(null)
 
     const isDespachoAgencia = serviceCode === 'despacho_agencia'
 
@@ -127,6 +138,8 @@ export default function EditShipmentPage({ params }: { params: Promise<{ id: str
         setDeliveryType(s.delivery_type)
         setPackageSize(s.package_size)
         setDepartment(s.recipient_department || '')
+        setRecipientLat(s.recipient_lat || null)
+        setRecipientLng(s.recipient_lng || null)
 
         // Reverse-lookup service code from service_type_id
         if (s.service_type_id && servicesRes.data) {
@@ -184,6 +197,9 @@ export default function EditShipmentPage({ params }: { params: Promise<{ id: str
             description: (formData.get('description') as string) || null,
             notes: (formData.get('notes') as string) || null,
             shipping_cost: parseFloat(formData.get('shipping_cost') as string) || null,
+            recipient_observations: (formData.get('recipient_observations') as string) || null,
+            recipient_lat: recipientLat,
+            recipient_lng: recipientLng,
         }
 
         // Update timestamp fields based on status change
@@ -302,8 +318,8 @@ export default function EditShipmentPage({ params }: { params: Promise<{ id: str
                                     type="button"
                                     onClick={() => setStatus(opt.value)}
                                     className={`px-4 py-3 rounded-lg border text-sm font-medium transition-all ${status === opt.value
-                                            ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30'
-                                            : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
+                                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/30'
+                                        : 'border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600'
                                         }`}
                                 >
                                     {opt.label}
@@ -430,6 +446,27 @@ export default function EditShipmentPage({ params }: { params: Promise<{ id: str
                                 <Input name="recipient_city" defaultValue={shipment.recipient_city || ''}
                                     className="bg-zinc-800/50 border-zinc-700 text-zinc-100" />
                             </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-zinc-300">Observaciones</Label>
+                            <Textarea
+                                name="recipient_observations"
+                                defaultValue={shipment.recipient_observations || ''}
+                                className="bg-zinc-800/50 border-zinc-700 text-zinc-100 min-h-[60px]"
+                                placeholder="Ej: Timbre no funciona, golpear puerta, dejar en portería..."
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-zinc-300">🗺️ Ubicación en el mapa</Label>
+                            <AddressMapPicker
+                                initialLat={shipment.recipient_lat}
+                                initialLng={shipment.recipient_lng}
+                                initialAddress={shipment.recipient_address || ''}
+                                onLocationSelect={(lat, lng) => {
+                                    setRecipientLat(lat || null)
+                                    setRecipientLng(lng || null)
+                                }}
+                            />
                         </div>
                     </CardContent>
                 </Card>
