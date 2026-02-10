@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { formatDateUY, getStatusLabel, getStatusColor, getOrgTypeLabel } from '@/lib/utils'
+import { formatDateUY, getStatusLabel, getStatusColor } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -49,6 +49,15 @@ const STATUSES = [
     { value: 'con_problema', label: '⚠️ Con problema' },
 ]
 
+const BULK_STATUSES = [
+    { value: 'pendiente', label: '⏳ Pendiente' },
+    { value: 'levantado', label: '📥 Levantado' },
+    { value: 'despachado', label: '🚚 Despachado' },
+    { value: 'en_transito', label: '🛣️ En tránsito' },
+    { value: 'entregado', label: '✅ Entregado' },
+    { value: 'con_problema', label: '⚠️ Con problema' },
+]
+
 const PAGE_SIZE = 20
 
 export default function ShipmentsPage() {
@@ -68,6 +77,12 @@ export default function ShipmentsPage() {
     // Orgs for filter dropdowns
     const [remitentes, setRemitentes] = useState<Organization[]>([])
     const [cadeterias, setCadeterias] = useState<Organization[]>([])
+
+    // Bulk actions
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    const [bulkStatus, setBulkStatus] = useState('')
+    const [bulkUpdating, setBulkUpdating] = useState(false)
+    const [bulkMessage, setBulkMessage] = useState('')
 
     const supabase = createClient()
 
@@ -149,12 +164,79 @@ export default function ShipmentsPage() {
         setPage(0)
     }
 
+    // ---- Bulk selection ----
+    function toggleSelect(id: string) {
+        setSelectedIds(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+        })
+    }
+
+    function toggleSelectAll() {
+        if (selectedIds.size === shipments.length) {
+            setSelectedIds(new Set())
+        } else {
+            setSelectedIds(new Set(shipments.map(s => s.id)))
+        }
+    }
+
+    async function executeBulkStatusChange() {
+        if (!bulkStatus || selectedIds.size === 0) return
+        setBulkUpdating(true)
+        setBulkMessage('')
+
+        const ids = Array.from(selectedIds)
+
+        // Update all selected shipments
+        const { error } = await supabase
+            .from('shipments')
+            .update({ status: bulkStatus })
+            .in('id', ids)
+
+        if (error) {
+            setBulkMessage(`❌ Error: ${error.message}`)
+            setBulkUpdating(false)
+            return
+        }
+
+        // Update timestamps based on status
+        const timestampField: Record<string, string> = {
+            levantado: 'pickup_at',
+            despachado: 'dispatched_at',
+            entregado: 'delivered_at',
+        }
+        if (timestampField[bulkStatus]) {
+            await supabase
+                .from('shipments')
+                .update({ [timestampField[bulkStatus]]: new Date().toISOString() })
+                .in('id', ids)
+        }
+
+        // Insert events for each shipment
+        const events = ids.map(shipmentId => ({
+            shipment_id: shipmentId,
+            event_type: 'status_change',
+            description: `Estado cambiado masivamente a ${getStatusLabel(bulkStatus)}`,
+            metadata: { to: bulkStatus, bulk: true },
+        }))
+        await supabase.from('shipment_events').insert(events)
+
+        setBulkMessage(`✅ ${ids.length} envíos actualizados a "${getStatusLabel(bulkStatus)}"`)
+        setSelectedIds(new Set())
+        setBulkStatus('')
+        setBulkUpdating(false)
+        fetchShipments()
+    }
+
     const totalPages = Math.ceil(totalCount / PAGE_SIZE)
     const sizeLabels: Record<string, string> = {
         chico: 'Chico',
         mediano: 'Mediano',
         grande: 'Grande',
     }
+    const allSelected = shipments.length > 0 && selectedIds.size === shipments.length
 
     return (
         <div className="space-y-6">
@@ -273,11 +355,71 @@ export default function ShipmentsPage() {
                 </div>
             </div>
 
+            {/* Bulk Actions Toolbar */}
+            {selectedIds.size > 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 font-bold text-sm">
+                            {selectedIds.size}
+                        </div>
+                        <span className="text-sm text-amber-200">
+                            envío{selectedIds.size !== 1 ? 's' : ''} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Select value={bulkStatus} onValueChange={setBulkStatus}>
+                            <SelectTrigger className="w-48 bg-zinc-800/80 border-zinc-700 text-zinc-100 h-9">
+                                <SelectValue placeholder="Cambiar estado a..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-zinc-800 border-zinc-700">
+                                {BULK_STATUSES.map(s => (
+                                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            size="sm"
+                            disabled={!bulkStatus || bulkUpdating}
+                            onClick={executeBulkStatusChange}
+                            className="bg-amber-500 hover:bg-amber-600 text-black font-medium px-4"
+                        >
+                            {bulkUpdating ? 'Actualizando...' : '⚡ Aplicar'}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => { setSelectedIds(new Set()); setBulkStatus('') }}
+                            className="text-zinc-400 hover:text-zinc-200"
+                        >
+                            ✕ Cancelar
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk message */}
+            {bulkMessage && (
+                <div className={`p-3 rounded-lg text-sm ${bulkMessage.startsWith('✅')
+                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                    : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                    }`}>
+                    {bulkMessage}
+                </div>
+            )}
+
             {/* Table */}
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/80">
                 <Table>
                     <TableHeader>
                         <TableRow className="border-zinc-800 hover:bg-transparent">
+                            <TableHead className="text-zinc-400 w-[40px]">
+                                <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={toggleSelectAll}
+                                    className="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+                                />
+                            </TableHead>
                             <TableHead className="text-zinc-400 w-[100px]">Tracking</TableHead>
                             <TableHead className="text-zinc-400">Fecha</TableHead>
                             <TableHead className="text-zinc-400">Remitente</TableHead>
@@ -293,7 +435,7 @@ export default function ShipmentsPage() {
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center text-zinc-500 py-10">
+                                <TableCell colSpan={11} className="text-center text-zinc-500 py-10">
                                     <div className="flex items-center justify-center gap-2">
                                         <div className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
                                         Cargando envíos...
@@ -302,7 +444,7 @@ export default function ShipmentsPage() {
                             </TableRow>
                         ) : shipments.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center text-zinc-500 py-16">
+                                <TableCell colSpan={11} className="text-center text-zinc-500 py-16">
                                     <div className="space-y-2">
                                         <span className="text-4xl">📦</span>
                                         <p className="text-zinc-400">No se encontraron envíos</p>
@@ -316,7 +458,18 @@ export default function ShipmentsPage() {
                             </TableRow>
                         ) : (
                             shipments.map(shipment => (
-                                <TableRow key={shipment.id} className="border-zinc-800 hover:bg-zinc-800/30">
+                                <TableRow
+                                    key={shipment.id}
+                                    className={`border-zinc-800 hover:bg-zinc-800/30 ${selectedIds.has(shipment.id) ? 'bg-amber-500/5' : ''}`}
+                                >
+                                    <TableCell>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(shipment.id)}
+                                            onChange={() => toggleSelect(shipment.id)}
+                                            className="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0 cursor-pointer"
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs text-emerald-400">
                                         {shipment.tracking_code}
                                     </TableCell>
@@ -368,7 +521,7 @@ export default function ShipmentsPage() {
                                                     🔍
                                                 </Button>
                                             </Link>
-                                            <Link href={`/admin/shipments/${shipment.id}?edit=true`}>
+                                            <Link href={`/admin/shipments/${shipment.id}/edit`}>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
