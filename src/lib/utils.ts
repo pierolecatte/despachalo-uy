@@ -1,0 +1,101 @@
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+/**
+ * Genera un código de tracking único para envíos.
+ * Formato: DUY-XXXXXXXX (8 caracteres alfanuméricos)
+ */
+export function generateTrackingCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = 'DUY-'
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+/**
+ * Formatea una fecha a formato uruguayo (dd/mm/yyyy HH:mm)
+ */
+export function formatDateUY(date: string | Date): string {
+  const d = new Date(date)
+  return d.toLocaleString('es-UY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * Formatea un precio en pesos uruguayos
+ */
+export function formatPriceUYU(amount: number): string {
+  return new Intl.NumberFormat('es-UY', {
+    style: 'currency',
+    currency: 'UYU',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+/**
+ * Traduce el estado del envío a español legible
+ */
+export function getStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pendiente: 'Pendiente',
+    levantado: 'Levantado',
+    despachado: 'Despachado',
+    en_transito: 'En tránsito',
+    entregado: 'Entregado',
+    con_problema: 'Con problema',
+  }
+  return labels[status] || status
+}
+
+/**
+ * Devuelve el color asociado a cada estado del envío (para badges/chips)
+ */
+export function getStatusColor(status: string): string {
+  const colors: Record<string, string> = {
+    pendiente: 'bg-yellow-100 text-yellow-800',
+    levantado: 'bg-blue-100 text-blue-800',
+    despachado: 'bg-indigo-100 text-indigo-800',
+    en_transito: 'bg-purple-100 text-purple-800',
+    entregado: 'bg-green-100 text-green-800',
+    con_problema: 'bg-red-100 text-red-800',
+  }
+  return colors[status] || 'bg-gray-100 text-gray-800'
+}
+
+/**
+ * Traduce el rol de usuario a español legible
+ */
+export function getRoleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    super_admin: 'Super Administrador',
+    org_admin: 'Administrador',
+    operador: 'Operador',
+    cadete: 'Cadete',
+  }
+  return labels[role] || role
+}
+
+/**
+ * Traduce el tipo de organización a español legible
+ */
+export function getOrgTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    remitente: 'Remitente',
+    cadeteria: 'Cadetería',
+    agencia: 'Agencia',
+    admin: 'Administración',
+  }
+  return labels[type] || type
+}
