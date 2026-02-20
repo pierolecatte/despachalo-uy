@@ -220,8 +220,12 @@ export async function POST(req: NextRequest) {
         await Promise.all(uniqueRemitentes.map(async (remitenteId) => {
             // Find a shipment for this remitente to get the URL
             const ship = shipments.find(s => s.remitente_org_id === remitenteId)
-            if (ship?.remitente?.logo_url) {
-                const logo = await fetchImageAndConvertBase64(ship.remitente.logo_url)
+
+            const remitenteAny = (ship as any)?.remitente;
+            const remitente = Array.isArray(remitenteAny) ? remitenteAny[0] : remitenteAny;
+
+            if (remitente?.logo_url) {
+                const logo = await fetchImageAndConvertBase64(remitente.logo_url)
                 if (logo) {
                     logosByRemitente[remitenteId] = logo
                 }
@@ -373,9 +377,13 @@ export async function POST(req: NextRequest) {
             y += 4
 
             // Cleaned Strings
-            const senderName = cleanText(ship.remitente?.name || 'Remitente')
-            const senderAddr = cleanText(ship.remitente?.address)
-            const senderPhone = cleanText(ship.remitente?.phone)
+            // Cleaned Strings
+            const remitenteAny = (ship as any)?.remitente;
+            const remitente = Array.isArray(remitenteAny) ? remitenteAny[0] : remitenteAny;
+
+            const senderName = cleanText(remitente?.name || 'Remitente')
+            const senderAddr = cleanText(remitente?.address)
+            const senderPhone = cleanText(remitente?.phone)
 
             const recipName = cleanText(ship.recipient_name)
             const recipAddr = cleanText(ship.recipient_address)

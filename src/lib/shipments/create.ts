@@ -49,9 +49,9 @@ export async function createShipment(
         finalPackages.push({
             index: 1,
             size: (shipmentData.package_size as 'chico' | 'mediano' | 'grande') || 'mediano',
-            weight_kg: shipmentData.weight_kg,
-            shipping_cost: shipmentData.shipping_cost,
-            content_description: shipmentData.description
+            weight_kg: shipmentData.weight_kg as number | null | undefined,
+            shipping_cost: shipmentData.shipping_cost as number | null | undefined,
+            content_description: shipmentData.description as string | null | undefined
         });
     }
 
@@ -61,10 +61,10 @@ export async function createShipment(
     // 3. Call RPC
     // RPC expects JSONB, so we pass objects directly.
     // Note: RPC params are p_shipment_data, p_packages_data
-    const { data, error } = await supabase.rpc('create_shipment_with_packages', {
+    const { data, error } = await supabase.rpc('create_shipment_with_packages' as any, {
         p_shipment_data: shipmentData,
         p_packages_data: finalPackages
-    });
+    } as any);
 
     if (error) {
         console.error('RPC create_shipment_with_packages error:', error);
