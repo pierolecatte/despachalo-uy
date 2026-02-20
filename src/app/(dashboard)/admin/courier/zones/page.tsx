@@ -4,64 +4,65 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { PlusCircle, Trash2 } from "lucide-react";
+import { PlusCircle, Pencil, Map as MapIcon } from "lucide-react";
 import { ZoneMap } from "@/components/pricing/ZoneMap";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { requireCourierOrg } from "@/lib/auth/get-courier-org";
+import { ImportTemplateModal } from "./_components/import-template-modal";
+import { DeleteZoneButton } from "./_components/delete-zone-button";
 
-async function deleteZone(zoneId: string) {
-    'use server';
+export default async function ZonesPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+    const searchParams = await props.searchParams;
+    const orgParam = searchParams?.org;
+
+    // Resolve context
+    const courierOrgId = await requireCourierOrg(orgParam);
     const supabase = await createClient();
-    const { error } = await supabase.from('zones' as any).delete().eq('id', zoneId); // RLS handles permission
-    if (error) console.error("Delete error", error);
-    revalidatePath('/admin/courier/zones');
-}
 
-export default async function ZonesPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return <div>Access Denied</div>;
-
-    const { data: orgMember } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
+    // Fetch Courier Org Name for context
+    const { data: courierOrg } = await supabase
+        .from('organizations')
+        .select('name')
+        .eq('id', courierOrgId)
         .single();
-    if (!orgMember) return <div>No Organization</div>;
 
-    // Fetch Zones
-    const { data: zones } = await supabase
+    const courierName = courierOrg?.name || 'Desconocida';
+
+    // Fetch Zones using the public client because 'zones' is exposed via view and it makes joining 'organizations' trivial
+    const { data: zones, error: fetchError } = await supabase
         .from('zones' as any)
-        .select('*, sender_org:sender_org_id(name), zone_geoms(geojson)')
-        .eq('courier_org_id', orgMember.organization_id)
+        .select('*, sender_org:organizations!sender_org_id(name), geojson')
+        .eq('courier_org_id', courierOrgId)
         .order('created_at', { ascending: false });
+
+    if (fetchError) {
+        console.error("Error fetching zones:", fetchError);
+    }
+
+    // Developer Logs
+    if (process.env.NODE_ENV === 'development') {
+        console.log(`[Zonas] orgParam: ${orgParam}, resolvedCourierName: ${courierName}, totalZones: ${zones?.length || 0}`);
+    }
 
     // Format for Map
     const mapZones = zones?.map((z) => ({
         id: z.id,
         name: z.name,
-        geojson: z.zone_geoms?.[0]?.geojson, // One-to-one strictly speaking but usually returned as array if relation
-        // wait, simple relation might return object or array depending on querying?
-        // Let's assume one-to-one logic: usually supabase returns array for joins unless single().
-        // If zone_geoms is foreign table, it returns json array.
+        geojson: z.geojson,
         color: z.sender_org_id ? 'orange' : 'blue' // Color code by type
     })) || [];
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Zonas de Cobertura</h2>
-                    <p className="text-muted-foreground">
-                        Define áreas geográficas para aplicar tarifas diferenciadas (Stop Fees).
-                    </p>
+            <div className="flex justify-end items-center mb-2">
+                <div className="flex items-center gap-2">
+                    <ImportTemplateModal courierOrgId={courierOrgId} />
+                    <Link href={`/admin/courier/zones/new?org=${courierOrgId}`}>
+                        <Button>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Nueva Zona
+                        </Button>
+                    </Link>
                 </div>
-                <Link href="/admin/courier/zones/new">
-                    <Button>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Nueva Zona
-                    </Button>
-                </Link>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -82,26 +83,35 @@ export default async function ZonesPage() {
                                 <TableBody>
                                     {zones?.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={2} className="text-center text-muted-foreground">Sin zonas</TableCell>
+                                            <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
+                                                No hay zonas cargadas para la cadetería <strong>{courierName}</strong>.
+                                            </TableCell>
                                         </TableRow>
                                     )}
                                     {zones?.map((zone) => (
                                         <TableRow key={zone.id}>
                                             <TableCell>
                                                 <div className="font-medium">{zone.name}</div>
-                                                <div className="text-xs text-muted-foreground">
-                                                    {zone.sender_org ? `Cliente: ${zone.sender_org.name}` : 'General'}
+                                                <div className="text-xs text-muted-foreground mt-1 flex flex-col gap-1">
+                                                    <span>{zone.sender_org ? `Cliente: ${zone.sender_org.name}` : 'General (Para todos)'}</span>
+                                                    {zone.source_template_id && (
+                                                        <Badge variant="outline" className="w-fit text-[10px] h-4 px-1 py-0">Importada</Badge>
+                                                    )}
                                                 </div>
                                             </TableCell>
-                                            <TableCell>
-                                                <form action={async () => {
-                                                    'use server';
-                                                    await deleteZone(zone.id);
-                                                }}>
-                                                    <Button variant="ghost" size="icon" type="submit">
-                                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                                    </Button>
-                                                </form>
+                                            <TableCell className="text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <Link href={`/admin/courier/zones/${zone.id}?org=${courierOrgId}`}>
+                                                        <Button variant="ghost" size="icon" type="button">
+                                                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                        </Button>
+                                                    </Link>
+                                                    <DeleteZoneButton
+                                                        zoneId={zone.id}
+                                                        zoneName={zone.name}
+                                                        courierOrgId={courierOrgId}
+                                                    />
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -121,8 +131,11 @@ export default async function ZonesPage() {
                             {mapZones.length > 0 ? (
                                 <ZoneMap zones={mapZones} height="100%" />
                             ) : (
-                                <div className="h-full flex items-center justify-center text-muted-foreground bg-muted/20">
-                                    No hay zonas para mostrar
+                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground bg-muted/20 gap-2">
+                                    <p>No hay zonas para mostrar en el mapa.</p>
+                                    <Link href={`/admin/courier/zones/new?org=${courierOrgId}`}>
+                                        <Button variant="outline" size="sm">Crear Primera Zona</Button>
+                                    </Link>
                                 </div>
                             )}
                         </CardContent>

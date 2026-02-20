@@ -3,16 +3,46 @@
 import {
     MapContainer,
     TileLayer,
-    Polygon,
-    Popup
+    GeoJSON,
+    useMap
 } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css'; // Ensure CSS is imported in layout or here if Next.js allows
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { useEffect } from 'react';
 
 export interface ZoneData {
     id: string;
     name: string;
     geojson: any; // GeoJSON Feature or Geometry
     color?: string;
+}
+
+function FitBounds({ zones }: { zones: ZoneData[] }) {
+    const map = useMap();
+
+    useEffect(() => {
+        if (!zones || zones.length === 0) return;
+        try {
+            const group = new L.FeatureGroup();
+            let hasValidLayers = false;
+
+            zones.forEach(zone => {
+                if (zone.geojson) {
+                    const layer = L.geoJSON(zone.geojson);
+                    layer.addTo(group);
+                    hasValidLayers = true;
+                }
+            });
+
+            if (hasValidLayers) {
+                map.fitBounds(group.getBounds(), { padding: [20, 20] });
+            }
+        } catch (e) {
+            console.error("Error fitting bounds:", e);
+        }
+    }, [map, zones]);
+
+    return null;
 }
 
 export default function ZoneMapInner({
@@ -30,33 +60,36 @@ export default function ZoneMapInner({
             zoom={zoom}
             scrollWheelZoom={true}
             style={{ height: '100%', width: '100%', minHeight: '400px' }}
+            className="z-0 relative" // FIX: Ensure Leaflet is behind Radix UI modals
         >
             <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
+
+            <FitBounds zones={zones} />
+
             {zones.map((zone) => {
-                if (!zone.geojson || !zone.geojson.coordinates) return null;
-
-                // GeoJSON Polygon [lng, lat] -> Leaflet [lat, lng]
-                // Supporting simple Polygon (one ring)
-                let positions: [number, number][] = [];
-                try {
-                    // Check if it's Feature or Geometry
-                    const coords = zone.geojson.type === 'Feature'
-                        ? zone.geojson.geometry.coordinates[0]
-                        : zone.geojson.coordinates[0];
-
-                    positions = coords.map((c: number[]) => [c[1], c[0]] as [number, number]);
-                } catch (e) {
-                    console.error("Invalid GeoJSON", zone.name);
-                    return null;
-                }
+                if (!zone.geojson) return null;
 
                 return (
-                    <Polygon key={zone.id} positions={positions} pathOptions={{ color: zone.color || 'blue' }}>
-                        <Popup>{zone.name}</Popup>
-                    </Polygon>
+                    <GeoJSON
+                        key={zone.id}
+                        data={zone.geojson}
+                        style={{
+                            color: zone.color || 'blue',
+                            weight: 2,
+                            opacity: 0.8,
+                            fillOpacity: 0.2
+                        }}
+                        onEachFeature={(feature, layer) => {
+                            layer.bindTooltip(zone.name, {
+                                permanent: false,
+                                direction: 'center',
+                                className: 'font-semibold'
+                            });
+                        }}
+                    />
                 );
             })}
         </MapContainer>

@@ -35,10 +35,7 @@ const navByRole: Record<string, NavItem[]> = {
         { label: 'Departamentos', href: '/admin/departments', icon: '🗺️' },
         { label: 'Auditoría', href: '/admin/auditoria', icon: '🛡️' },
         // Courier Section
-        { label: 'Conf. Servicios', href: '/admin/courier/services', icon: '🛠️' },
-        { label: 'Tarifas', href: '/admin/courier/tariffs', icon: '💰' },
-        { label: 'Zonas', href: '/admin/courier/zones', icon: '🗺️' },
-        { label: 'Facturación', href: '/admin/courier/billing', icon: '🧾' },
+        { label: 'Admin. Cadetería', href: '/admin/courier/services', icon: '🏍️' },
     ],
     org_admin: [
         { label: 'Dashboard', href: '/remitente', icon: '📊' },
@@ -60,11 +57,8 @@ const navByRole: Record<string, NavItem[]> = {
 // Items adicionales para cadeterías (Configuración)
 const cadeteriaNav: NavItem[] = [
     { label: 'Dashboard', href: '/admin/courier', icon: '📊' }, // Or wherever the main dash is
-    { label: 'Servicios', href: '/admin/courier/services', icon: '🛠️' },
-    { label: 'Tarifas', href: '/admin/courier/tariffs', icon: '💰' },
-    { label: 'Zonas', href: '/admin/courier/zones', icon: '🗺️' },
-    { label: 'Facturación', href: '/admin/courier/billing', icon: '🧾' },
-    { label: 'Cadetes', href: '/cadeteria/cadetes', icon: '🏍️' }, // Keep this one? Maybe move to admin too?
+    { label: 'Admin. Cadetería', href: '/admin/courier/services', icon: '🏍️' },
+    { label: 'Cadetes', href: '/cadeteria/cadetes', icon: '🚚' },
     { label: 'Envíos', href: '/cadeteria/shipments', icon: '📦' },
 ]
 

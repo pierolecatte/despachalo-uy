@@ -1,49 +1,58 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getPricingClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { requireCourierOrg } from "@/lib/auth/get-courier-org";
 
-export default async function TariffsPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+export default async function TariffsPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+    const searchParams = await props.searchParams;
+    const orgParam = searchParams?.org;
 
-    if (!user) return <div>Access Denied</div>;
+    // Resolve context & enforce selection
+    const courierOrgId = await requireCourierOrg(orgParam);
+    const pricingDb = await getPricingClient();
 
-    const { data: orgMember } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .single();
-
-    if (!orgMember) return <div>No organization found</div>;
-
-    // Fetch Tariff Sets
-    const { data: tariffSets } = await supabase
+    const { data: tariffSetsRaw, error } = await pricingDb
         .from('tariff_sets' as any)
-        .select('*, sender_org:sender_org_id(name)')
-        .eq('courier_org_id', orgMember.organization_id)
+        .select('*')
+        .eq('courier_org_id', courierOrgId)
         .order('created_at', { ascending: false });
+
+    // Manually fetch sender organizations to bypass PostgREST cross-schema relation issues (PGRST200)
+    let tariffSets = tariffSetsRaw || [];
+    if (tariffSets.length > 0) {
+        const senderIds = Array.from(new Set(tariffSets.map(ts => ts.sender_org_id).filter(Boolean)));
+
+        if (senderIds.length > 0) {
+            const supabase = await createClient(); // Need public schema for organizations
+            const { data: senders } = await supabase
+                .from('organizations')
+                .select('id, name')
+                .in('id', senderIds);
+
+            const senderMap = new Map(senders?.map(s => [s.id, s]) || []);
+            tariffSets = tariffSets.map(ts => ({
+                ...ts,
+                sender_org: ts.sender_org_id ? senderMap.get(ts.sender_org_id) : null
+            }));
+        }
+    }
 
     // Fetch Senders (for "Create New" modal later, but maybe just a link for now)
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Tarifarios</h2>
-                    <p className="text-muted-foreground">
-                        Gestiona los conjuntos de tarifas (General y por Cliente).
-                    </p>
-                </div>
-                <Link href="/admin/courier/tariffs/new">
+            <div className="flex justify-end items-center">
+                <Link href={`/admin/courier/tariffs/new${orgParam ? `?org=${orgParam}` : ''}`}>
                     <Button>
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Crear Tarifario
                     </Button>
                 </Link>
             </div>
+
 
             <div className="rounded-md border">
                 <Table>
@@ -79,7 +88,7 @@ export default async function TariffsPage() {
                                     </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <Link href={`/admin/courier/tariffs/${set.id}`}>
+                                    <Link href={`/admin/courier/tariffs/${set.id}${orgParam ? `?org=${orgParam}` : ''}`}>
                                         <Button variant="ghost" size="sm">
                                             Editar Reglas
                                         </Button>

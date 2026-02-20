@@ -11,9 +11,10 @@ interface ServiceItemProps {
     serviceName: string;
     description: string;
     initialEnabled: boolean;
+    courierOrgId: string;
 }
 
-export function ServiceItem({ serviceCode, serviceName, description, initialEnabled }: ServiceItemProps) {
+export function ServiceItem({ serviceCode, serviceName, description, initialEnabled, courierOrgId }: ServiceItemProps) {
     const [enabled, setEnabled] = useState(initialEnabled);
     const [isPending, startTransition] = useTransition();
 
@@ -21,7 +22,7 @@ export function ServiceItem({ serviceCode, serviceName, description, initialEnab
         setEnabled(checked);
         startTransition(async () => {
             try {
-                await toggleServiceAction(serviceCode as ServiceTypeCode, checked);
+                await toggleServiceAction(serviceCode as ServiceTypeCode, checked, courierOrgId);
             } catch (error) {
                 setEnabled(!checked);
                 console.error("Failed to toggle service", error);

@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { type LabelConfig } from '@/types/label-config'
 import { useState } from 'react'
+import { shouldShowBultoFooterLine } from '@/lib/utils'
 
 interface LabelPreviewProps {
     config: LabelConfig
@@ -259,7 +260,9 @@ export default function LabelPreview({ config, logoUrl, orgName, isFragile = fal
                     <div style={{ fontSize: config.font_size_content * 0.8, color: '#666', marginTop: 4 }}>
                         {config.show_cadeteria && <div>Cadetería: <b>Flash Express</b></div>}
                         {config.show_agencia && <div>Agencia: <b>DAC</b></div>}
-                        {config.show_description && <div style={{ marginTop: 2 }}>Caja con documentos confidenciales</div>}
+                        {config.show_description && shouldShowBultoFooterLine('Caja con documentos confidenciales', 1, true) && (
+                            <div style={{ marginTop: 2 }}>Caja con documentos confidenciales</div>
+                        )}
                     </div>
                 </div>
 

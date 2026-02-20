@@ -26,3 +26,8 @@ export async function createClient() {
         }
     )
 }
+
+export async function getPricingClient() {
+    const supabase = await createClient();
+    return supabase.schema('pricing');
+}

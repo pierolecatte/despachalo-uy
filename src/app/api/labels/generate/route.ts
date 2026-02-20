@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { jsPDF } from 'jspdf'
 import QRCode from 'qrcode'
 import { type LabelConfig, DEFAULT_LABEL_CONFIG } from '@/types/label-config'
+import { shouldShowBultoFooterLine } from '@/lib/utils'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -512,7 +513,9 @@ export async function POST(req: NextRequest) {
             }
             if (cfg.show_description) {
                 const desc = cleanText(pkg?.content_description || ship.description)
-                if (desc) {
+                const isDespachoAgencia = !!ship.agencia_org_id || ship.delivery_type !== 'domicilio' && !ship.agencia_org_id === false
+
+                if (desc && shouldShowBultoFooterLine(desc, task.total, !!ship.agencia_org_id)) {
                     const lines = doc.splitTextToSize(desc, contentW)
                     doc.text(lines, ml, fy)
                 }

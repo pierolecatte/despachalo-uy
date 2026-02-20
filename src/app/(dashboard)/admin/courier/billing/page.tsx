@@ -6,11 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { generateSettlement } from "@/lib/pricing/api";
 import { revalidatePath } from "next/cache";
+import { requireCourierOrg, validateCourierAction } from "@/lib/auth/get-courier-org";
 
 async function generateSettlementAction(formData: FormData) {
     'use server';
     const senderId = formData.get('sender_id') as string;
     const courierId = formData.get('courier_id') as string;
+
+    const validatedCourierId = await validateCourierAction(courierId);
 
     // Default period: Last month? Or just "All Pending"?
     // The RPC takes specific dates. 
@@ -18,26 +21,20 @@ async function generateSettlementAction(formData: FormData) {
     const today = new Date().toISOString().split('T')[0];
     const start = '2024-01-01'; // Arbitrary start, or fetch earliest pending.
 
-    const result = await generateSettlement(courierId, senderId, start, today);
+    const result = await generateSettlement(validatedCourierId, senderId, start, today);
     if (!result.success) {
         console.error(result.message);
     }
     revalidatePath('/admin/courier/billing');
 }
 
-export default async function BillingPage() {
+export default async function BillingPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+    const searchParams = await props.searchParams;
+    const orgParam = searchParams?.org;
+
+    // Resolve context & enforce selection
+    const courierOrgId = await requireCourierOrg(orgParam);
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return <div>Access Denied</div>;
-
-    const { data: orgMember } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .single();
-    if (!orgMember) return <div>No Org</div>;
-
-    const courierOrgId = orgMember.organization_id;
 
     // 1. Fetch Pending Summary by Sender
     // Direct query on view is easier than RPC for now.
@@ -85,13 +82,6 @@ export default async function BillingPage() {
 
     return (
         <div className="space-y-8">
-            <div>
-                <h2 className="text-2xl font-bold tracking-tight">Facturación y Liquidaciones</h2>
-                <p className="text-muted-foreground">
-                    Control de envíos pendientes de cobro y generación de liquidaciones.
-                </p>
-            </div>
-
             <Card>
                 <CardHeader>
                     <CardTitle>Pendiente de Cobro</CardTitle>

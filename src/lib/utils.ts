@@ -99,3 +99,26 @@ export function getOrgTypeLabel(type: string): string {
   }
   return labels[type] || type
 }
+
+/**
+ * Determina si se debe mostrar la descripción como "línea inferior de bultos" en las etiquetas.
+ * Oculta la leyenda (ej: "1 de 1 Bulto") si la etiqueta ya tiene numeración superior de paquetes
+ * (packageCount > 1) o si el servicio es Despacho Agencia.
+ */
+export function shouldShowBultoFooterLine(
+  description: string | null | undefined,
+  packageCount: number,
+  isDespachoAgencia: boolean
+): boolean {
+  if (!description) return false
+
+  // Verificamos si la descripción es textualmente "X de Y Bultos", "X Bultos", etc.
+  const isBultoText = /^(\d+\s*de\s*\d+|\d+)\s*bultos?$/i.test(description.trim())
+
+  if (isBultoText) {
+    if (packageCount > 1) return false
+    if (isDespachoAgencia) return false
+  }
+
+  return true
+}

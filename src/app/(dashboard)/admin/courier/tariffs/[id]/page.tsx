@@ -1,44 +1,76 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getPricingClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
+import { AddRuleModal } from "./add-rule-modal";
+import { RuleActionsMenu } from "./rule-actions-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { ChevronLeft, Plus } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { notFound } from "next/navigation";
+import { requireCourierOrg } from "@/lib/auth/get-courier-org";
+import { withOrgQuery } from "@/lib/courier/url-helpers";
 
 interface PageProps {
-    params: { id: string };
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ [key: string]: string | undefined }>;
 }
 
-export default async function TariffDetailsPage({ params }: PageProps) {
+export default async function TariffDetailsPage(props: PageProps) {
+    const params = await props.params;
+    const searchParams = await props.searchParams;
+    const orgParam = searchParams?.org;
+    const courierOrgId = await requireCourierOrg(orgParam);
+
     const supabase = await createClient();
+    const pricingDb = await getPricingClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return <div>Access Denied</div>;
 
     const { id } = params;
 
-    // Fetch Tariff Set details
-    const { data: tariffSet } = await supabase
+    let { data: tariffSetRaw } = await pricingDb
         .from('tariff_sets' as any)
-        .select('*, sender_org:sender_org_id(name)')
+        .select('*')
         .eq('id', id)
         .single();
 
-    if (!tariffSet) return notFound();
+    if (!tariffSetRaw) return notFound();
+
+    // Manually fetch sender org
+    let senderOrg = null;
+    if (tariffSetRaw.sender_org_id) {
+        const { data: sender } = await supabase
+            .from('organizations')
+            .select('id, name')
+            .eq('id', tariffSetRaw.sender_org_id)
+            .single();
+        senderOrg = sender;
+    }
+
+    const tariffSet = { ...tariffSetRaw, sender_org: senderOrg };
 
     // Fetch Rules
-    const { data: rules } = await supabase
+    const { data: rules } = await pricingDb
         .from('tariff_rules' as any)
         .select('*, zone:zone_id(name)')
         .eq('tariff_set_id', id)
         .order('service_type')
         .order('rule_kind');
 
+    // Fetch dependencies for the modal
+    const { data: serviceTypes } = await supabase.from('service_types').select('*').order('name');
+    const { data: zones } = await pricingDb
+        .from('zones' as any)
+        .select('id, name')
+        .eq('courier_org_id', tariffSet.courier_org_id)
+        .is('is_active', true)
+        .order('name');
+
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
-                <Link href="/admin/courier/tariffs">
+                <Link href={withOrgQuery("/admin/courier/tariffs", courierOrgId)}>
                     <Button variant="outline" size="icon">
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -53,11 +85,11 @@ export default async function TariffDetailsPage({ params }: PageProps) {
             </div>
 
             <div className="flex justify-end">
-                {/* TODO: Add Rule Modal/Page */}
-                <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Agregar Regla
-                </Button>
+                <AddRuleModal
+                    tariffSetId={tariffSet.id}
+                    serviceTypes={serviceTypes || []}
+                    zones={zones || []}
+                />
             </div>
 
             <Card>
@@ -95,7 +127,12 @@ export default async function TariffDetailsPage({ params }: PageProps) {
                                         {new Intl.NumberFormat('es-UY', { style: 'currency', currency: 'UYU' }).format(rule.amount)}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm">Editar</Button>
+                                        <RuleActionsMenu
+                                            rule={rule}
+                                            tariffSetId={tariffSet.id}
+                                            serviceTypes={serviceTypes || []}
+                                            zones={zones || []}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
