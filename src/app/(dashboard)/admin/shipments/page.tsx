@@ -82,6 +82,7 @@ export default function ShipmentsPage() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [bulkStatus, setBulkStatus] = useState('')
     const [bulkUpdating, setBulkUpdating] = useState(false)
+    const [bulkDeleting, setBulkDeleting] = useState(false)
     const [bulkMessage, setBulkMessage] = useState('')
 
     const supabase = createClient()
@@ -230,6 +231,37 @@ export default function ShipmentsPage() {
         fetchShipments()
     }
 
+    async function executeBulkDelete() {
+        if (selectedIds.size === 0) return
+
+        if (!confirm('¿Estás seguro que deseas eliminar los envíos seleccionados?\n\nIMPORTANTE: Solo se eliminarán los envíos que estén en estado "Pendiente". Los demás permanecerán intactos.')) {
+            return
+        }
+
+        setBulkDeleting(true)
+        setBulkMessage('')
+
+        const ids = Array.from(selectedIds)
+
+        // Delete only pending shipments
+        const { error, count } = await supabase
+            .from('shipments')
+            .delete({ count: 'exact' })
+            .in('id', ids)
+            .eq('status', 'pendiente')
+
+        if (error) {
+            setBulkMessage(`❌ Error al eliminar: ${error.message}`)
+            setBulkDeleting(false)
+            return
+        }
+
+        setBulkMessage(`✅ ${count} envíos eliminados correctamente (solo pendientes).`)
+        setSelectedIds(new Set())
+        setBulkDeleting(false)
+        fetchShipments()
+    }
+
     const totalPages = Math.ceil(totalCount / PAGE_SIZE)
     const sizeLabels: Record<string, string> = {
         chico: 'Chico',
@@ -249,6 +281,11 @@ export default function ShipmentsPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
+                    <Link href="/admin/shipments/import">
+                        <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800">
+                            📥 Importar
+                        </Button>
+                    </Link>
                     <Link href="/admin/shipments/new">
                         <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/20">
                             ➕ Nuevo envío
@@ -384,6 +421,38 @@ export default function ShipmentsPage() {
                             className="bg-amber-500 hover:bg-amber-600 text-black font-medium px-4"
                         >
                             {bulkUpdating ? 'Actualizando...' : '⚡ Aplicar'}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                                const res = await fetch('/api/labels/generate', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ shipment_ids: Array.from(selectedIds) }),
+                                })
+                                if (res.ok) {
+                                    const blob = await res.blob()
+                                    const url = URL.createObjectURL(blob)
+                                    window.open(url, '_blank')
+                                } else {
+                                    const err = await res.json()
+                                    console.error('Label generation error:', err)
+                                    alert(`Error: ${err.error}\n\nDebug: ${JSON.stringify(err.debug || {}, null, 2)}`)
+                                }
+                            }}
+                            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                        >
+                            🏷️ Imprimir etiquetas
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={bulkUpdating || bulkDeleting}
+                            onClick={executeBulkDelete}
+                            className="bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20"
+                        >
+                            {bulkDeleting ? 'Eliminando...' : '🗑️ Eliminar'}
                         </Button>
                         <Button
                             size="sm"

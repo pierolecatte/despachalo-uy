@@ -12,6 +12,8 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import ShipmentFiles from '@/components/shipments/shipment-files'
+import ShipmentPackageQr from '@/components/shipments/shipment-package-qr'
+import PricingPanel from '@/components/pricing/PricingPanel'
 
 interface ShipmentDetail {
     id: string
@@ -39,7 +41,21 @@ interface ShipmentDetail {
     remitente_org_id: string
     cadeteria_org_id: string | null
     agencia_org_id: string | null
+    service_type_id: string | null
+    is_freight_paid: boolean
+    freight_amount: number | null
     qr_code_url: string | null
+    cadete_user_id: string | null
+    // Pricing Fields (Migration 021)
+    service_subtotal: number | null
+    reimbursable_subtotal: number | null
+    total_to_charge: number | null
+    pricing_snapshot_id: string | null
+    pricing_locked: boolean
+    pricing_incomplete: boolean
+    missing_pricing_reasons: string[] | null
+    zone_id: string | null
+    zone_stop_fee_amount: number | null
 }
 
 interface ShipmentEvent {
@@ -47,6 +63,16 @@ interface ShipmentEvent {
     event_type: string
     description: string | null
     created_at: string
+}
+
+interface PackageRow {
+    id: string
+    index: number
+    size: string
+    weight_kg: number | null
+    shipping_cost: number | null
+    content_description: string | null
+    qr_token: string
 }
 
 const STATUS_FLOW = ['pendiente', 'levantado', 'despachado', 'en_transito', 'entregado']
@@ -66,9 +92,13 @@ export default function ShipmentDetailPage() {
     const supabase = createClient()
     const [shipment, setShipment] = useState<ShipmentDetail | null>(null)
     const [events, setEvents] = useState<ShipmentEvent[]>([])
+    const [packages, setPackages] = useState<PackageRow[]>([])
     const [remitenteName, setRemitenteName] = useState('')
     const [cadeteriaName, setCadeteriaName] = useState('')
     const [agenciaName, setAgenciaName] = useState('')
+    const [serviceName, setServiceName] = useState('')
+    const [serviceCode, setServiceCode] = useState('')
+    const [cadeteName, setCadeteName] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [updating, setUpdating] = useState(false)
 
@@ -106,14 +136,51 @@ export default function ShipmentDetailPage() {
             setAgenciaName(org?.name || '')
         }
 
-        // Fetch events
+        // Fetch cadete name
+        if (data.cadete_user_id) {
+            const { data: cadete } = await supabase.from('users').select('full_name').eq('id', data.cadete_user_id).single()
+            setCadeteName(cadete?.full_name || null)
+        } else {
+            setCadeteName(null)
+        }
+
+        // Fetch service type
+        if (data.service_type_id) {
+            const { data: service } = await supabase.from('service_types').select('name, code').eq('id', data.service_type_id).single()
+            setServiceName(service?.name || '')
+            setServiceCode(service?.code || '')
+        }
+
+        // Fetch events with actor details
         const { data: eventsData } = await supabase
             .from('shipment_events')
-            .select('*')
+            .select(`
+                *,
+                actor:actor_user_id (
+                    full_name,
+                    role
+                )
+            `)
             .eq('shipment_id', id)
             .order('created_at', { ascending: false })
 
-        setEvents((eventsData as ShipmentEvent[]) || [])
+        // Map events to include actor info
+        const mappedEvents = (eventsData || []).map((e: any) => ({
+            ...e,
+            actor_name: e.actor?.full_name || 'Sistema',
+            actor_role: e.actor?.role || (e.actor_user_id ? 'Usuario' : 'Sistema')
+        }))
+
+        setEvents(mappedEvents)
+
+        // Fetch packages
+        const { data: pkgsData } = await supabase
+            .from('shipment_packages')
+            .select('id, index, size, weight_kg, shipping_cost, content_description, qr_token')
+            .eq('shipment_id', id)
+            .order('index', { ascending: true })
+        setPackages((pkgsData as PackageRow[]) || [])
+
         setLoading(false)
     }
 
@@ -130,12 +197,9 @@ export default function ShipmentDetailPage() {
 
         await supabase.from('shipments').update(updateData).eq('id', shipment.id)
 
-        // Add event
-        await supabase.from('shipment_events').insert({
-            shipment_id: shipment.id,
-            event_type: `status_change_${newStatus}`,
-            description: `Estado cambiado a ${getStatusLabel(newStatus)}`
-        })
+        // NOTE: Event is now created by Database Trigger (005_audit_system.sql)
+
+        await new Promise(resolve => setTimeout(resolve, 500)) // Small delay to allow trigger to propagate if needed (though usually instant for same connection, but good for UI feel)
 
         setUpdating(false)
         fetchShipment()
@@ -242,6 +306,13 @@ export default function ShipmentDetailPage() {
                 </Card>
             )}
 
+            {/* Pricing Panel */}
+            <PricingPanel
+                shipment={shipment}
+                currUserRole="admin"
+                onUpdate={fetchShipment}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Destinatario */}
                 <Card className="bg-zinc-900/80 border-zinc-800">
@@ -258,17 +329,40 @@ export default function ShipmentDetailPage() {
                     </CardContent>
                 </Card>
 
-                {/* Paquete */}
+                {/* Paquetes */}
                 <Card className="bg-zinc-900/80 border-zinc-800">
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-base text-zinc-200">📦 Paquete</CardTitle>
+                        <CardTitle className="text-base text-zinc-200">📦 Paquetes ({packages.length > 0 ? packages.length : shipment.package_count})</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <InfoRow label="Tipo entrega" value={shipment.delivery_type === 'domicilio' ? '🏠 Domicilio' : '🏪 Sucursal'} />
-                        <InfoRow label="Tamaño" value={sizeLabels[shipment.package_size]} />
-                        <InfoRow label="Cantidad" value={String(shipment.package_count)} />
-                        <InfoRow label="Peso" value={shipment.weight_kg ? `${shipment.weight_kg} kg` : null} />
-                        <InfoRow label="Descripción" value={shipment.description} />
+                        {packages.length > 0 ? (
+                            <div className="space-y-3">
+                                {packages.map(pkg => (
+                                    <div key={pkg.id} className="p-3 rounded-lg border border-zinc-700/50 bg-zinc-800/20 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-emerald-400">
+                                                📦 Paquete {pkg.index}{packages.length > 1 ? ` de ${packages.length}` : ''}
+                                            </span>
+                                            <span className="text-xs text-zinc-600 font-mono" title={pkg.qr_token}>
+                                                QR: {pkg.qr_token.substring(0, 8)}…
+                                            </span>
+                                        </div>
+                                        <InfoRow label="Tamaño" value={sizeLabels[pkg.size] || pkg.size} />
+                                        <InfoRow label="Peso" value={pkg.weight_kg ? `${pkg.weight_kg} kg` : null} />
+                                        <InfoRow label="Costo envío" value={pkg.shipping_cost ? formatPriceUYU(pkg.shipping_cost) : null} />
+                                        <InfoRow label="Descripción" value={pkg.content_description} />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <>
+                                <InfoRow label="Tamaño" value={sizeLabels[shipment.package_size]} />
+                                <InfoRow label="Cantidad" value={String(shipment.package_count)} />
+                                <InfoRow label="Peso" value={shipment.weight_kg ? `${shipment.weight_kg} kg` : null} />
+                                <InfoRow label="Descripción" value={shipment.description} />
+                            </>
+                        )}
                         <InfoRow label="Notas" value={shipment.notes} />
                     </CardContent>
                 </Card>
@@ -280,8 +374,18 @@ export default function ShipmentDetailPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <InfoRow label="Remitente" value={remitenteName} />
+                        <InfoRow label="Tipo de Servicio" value={serviceName} />
                         <InfoRow label="Cadetería" value={cadeteriaName} />
+                        <InfoRow label="Cadete" value={shipment.cadete_user_id ? (cadeteName || '—') : 'SIN ASIGNAR'} />
                         <InfoRow label="Agencia" value={agenciaName} />
+
+                        {serviceCode === 'despacho_agencia' && (
+                            <>
+                                <Separator className="bg-zinc-800" />
+                                <InfoRow label="Flete pago en origen" value={shipment.is_freight_paid ? '✅ Sí' : '❌ No'} />
+                                <InfoRow label="Monto flete" value={shipment.freight_amount ? formatPriceUYU(shipment.freight_amount) : null} />
+                            </>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -309,23 +413,10 @@ export default function ShipmentDetailPage() {
                         <CardTitle className="text-base text-zinc-200">📱 Código QR</CardTitle>
                     </CardHeader>
                     <CardContent className="flex flex-col items-center">
-                        {shipment.qr_code_url ? (
-                            <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                    src={shipment.qr_code_url}
-                                    alt={`QR ${shipment.tracking_code}`}
-                                    className="w-40 h-40 rounded-lg bg-white p-1"
-                                />
-                                <p className="text-xs text-zinc-500 mt-2 text-center">
-                                    Escaneá para ver el tracking público
-                                </p>
-                            </>
-                        ) : (
-                            <p className="text-xs text-zinc-500 py-8 text-center">
-                                QR no disponible
-                            </p>
-                        )}
+                        <ShipmentPackageQr
+                            packages={packages}
+                            trackingCode={shipment.tracking_code}
+                        />
                     </CardContent>
                 </Card>
 
@@ -345,14 +436,21 @@ export default function ShipmentDetailPage() {
                         <p className="text-zinc-500 text-sm py-4 text-center">Sin eventos registrados</p>
                     ) : (
                         <div className="space-y-0">
-                            {events.map((event, i) => (
+                            {events.map((event: any, i) => (
                                 <div key={event.id} className="flex gap-4">
                                     <div className="flex flex-col items-center">
                                         <div className={`w-3 h-3 rounded-full mt-1.5 ${i === 0 ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
                                         {i < events.length - 1 && <div className="w-px flex-1 bg-zinc-800" />}
                                     </div>
                                     <div className="pb-5">
-                                        <p className="text-sm text-zinc-200">{event.description || event.event_type}</p>
+                                        <p className="text-sm text-zinc-200">
+                                            {event.description || event.event_type}
+                                            {event.actor_name && (
+                                                <span className="text-zinc-500 ml-1.5 text-xs">
+                                                    — por {event.actor_name} <span className="text-zinc-600">({event.actor_role})</span>
+                                                </span>
+                                            )}
+                                        </p>
                                         <p className="text-xs text-zinc-500 mt-0.5">{formatDateUY(event.created_at)}</p>
                                     </div>
                                 </div>

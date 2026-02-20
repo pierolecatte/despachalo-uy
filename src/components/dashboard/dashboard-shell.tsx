@@ -17,6 +17,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { ModeToggle } from '@/components/mode-toggle'
 
 interface NavItem {
     label: string
@@ -30,12 +31,20 @@ const navByRole: Record<string, NavItem[]> = {
         { label: 'Organizaciones', href: '/admin/organizations', icon: '🏢' },
         { label: 'Usuarios', href: '/admin/users', icon: '👥' },
         { label: 'Envíos', href: '/admin/shipments', icon: '📦' },
+        { label: 'Etiquetas', href: '/admin/labels', icon: '🏷️' },
         { label: 'Departamentos', href: '/admin/departments', icon: '🗺️' },
+        { label: 'Auditoría', href: '/admin/auditoria', icon: '🛡️' },
+        // Courier Section
+        { label: 'Conf. Servicios', href: '/admin/courier/services', icon: '🛠️' },
+        { label: 'Tarifas', href: '/admin/courier/tariffs', icon: '💰' },
+        { label: 'Zonas', href: '/admin/courier/zones', icon: '🗺️' },
+        { label: 'Facturación', href: '/admin/courier/billing', icon: '🧾' },
     ],
     org_admin: [
         { label: 'Dashboard', href: '/remitente', icon: '📊' },
         { label: 'Envíos', href: '/remitente/shipments', icon: '📦' },
         { label: 'Nuevo envío', href: '/remitente/shipments/new', icon: '➕' },
+        { label: 'Auditoría', href: '/admin/auditoria', icon: '🛡️' },
     ],
     operador: [
         { label: 'Dashboard', href: '/remitente', icon: '📊' },
@@ -48,10 +57,14 @@ const navByRole: Record<string, NavItem[]> = {
 }
 
 // Items adicionales para cadeterías
+// Items adicionales para cadeterías (Configuración)
 const cadeteriaNav: NavItem[] = [
-    { label: 'Dashboard', href: '/cadeteria', icon: '📊' },
-    { label: 'Cadetes', href: '/cadeteria/cadetes', icon: '🏍️' },
-    { label: 'Tarifas', href: '/cadeteria/tariffs', icon: '💰' },
+    { label: 'Dashboard', href: '/admin/courier', icon: '📊' }, // Or wherever the main dash is
+    { label: 'Servicios', href: '/admin/courier/services', icon: '🛠️' },
+    { label: 'Tarifas', href: '/admin/courier/tariffs', icon: '💰' },
+    { label: 'Zonas', href: '/admin/courier/zones', icon: '🗺️' },
+    { label: 'Facturación', href: '/admin/courier/billing', icon: '🧾' },
+    { label: 'Cadetes', href: '/cadeteria/cadetes', icon: '🏍️' }, // Keep this one? Maybe move to admin too?
     { label: 'Envíos', href: '/cadeteria/shipments', icon: '📦' },
 ]
 
@@ -132,8 +145,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                             href={item.href}
                             onClick={() => setSidebarOpen(false)}
                             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
                                 }`}
                         >
                             <span className="text-base">{item.icon}</span>
@@ -144,7 +157,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             </nav>
 
             {/* User section at bottom */}
-            <div className="p-4 border-t border-zinc-800">
+            <div className="p-4 border-t border-zinc-800 flex items-center gap-2">
+                <ModeToggle />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-zinc-800/50 transition-colors">
@@ -200,6 +214,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                     <span className="text-lg">📦</span>
                     <span className="font-bold text-zinc-50">despachalo</span>
                     <span className="text-emerald-400">.uy</span>
+                </div>
+                <div className="ml-auto">
+                    <ModeToggle />
                 </div>
             </div>
 

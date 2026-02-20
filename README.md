@@ -29,6 +29,35 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Variables de Entorno
+
+Copiar `.env.local.example` o crear `.env.local` en la raíz:
+
+| Variable | Tipo | Requerida | Descripción |
+|----------|------|-----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | client | ✅ | URL del proyecto Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client | ✅ | Anon key de Supabase |
+| `OPENAI_API_KEY` | **server-only** | Para importador IA | Key de OpenAI (gpt-4o-mini) |
+
+> ⚠️ **No usar `NEXT_PUBLIC_OPENAI_API_KEY`** — la key debe ser server-only.
+> `.env.local` ya está en `.gitignore`, no se commitea.
+
+### Verificar configuración
+
+```bash
+# Iniciar server
+npm run dev
+
+# Chequear OpenAI
+curl http://localhost:3000/api/import/status
+# → { "openaiConfigured": true }
+```
+
+### Deploy en Vercel
+
+1. En **Settings → Environment Variables**, agregar `OPENAI_API_KEY`
+2. Redeploy
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

@@ -6,23 +6,21 @@ import { formatDateUY } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
-interface ShipmentPhoto {
+interface ShipmentFile {
     id: string
     shipment_id: string
-    photo_url: string
-    photo_type: string
-    ai_extracted_data: Record<string, unknown> | null
-    processed: boolean
+    category: string
+    storage_path: string
     created_at: string
 }
 
 interface FileSlot {
     key: string
-    photo_type: string
+    category: string
     label: string
     icon: string
     description: string
-    existing?: ShipmentPhoto
+    existing?: ShipmentFile
 }
 
 interface ShipmentFilesProps {
@@ -32,50 +30,51 @@ interface ShipmentFilesProps {
 
 export default function ShipmentFiles({ shipmentId, readOnly = false }: ShipmentFilesProps) {
     const supabase = createClient()
-    const [photos, setPhotos] = useState<ShipmentPhoto[]>([])
+    const [files, setFiles] = useState<ShipmentFile[]>([])
     const [uploading, setUploading] = useState<string | null>(null)
     const [error, setError] = useState('')
     const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
     useEffect(() => {
-        fetchPhotos()
+        fetchFiles()
     }, [shipmentId])
 
-    async function fetchPhotos() {
+    async function fetchFiles() {
+        // Fetch from new table shipment_files
         const { data } = await supabase
-            .from('shipment_photos')
+            .from('shipment_files')
             .select('*')
             .eq('shipment_id', shipmentId)
             .order('created_at', { ascending: true })
 
-        setPhotos((data as ShipmentPhoto[]) || [])
+        setFiles((data as ShipmentFile[]) || [])
     }
 
     // Build the 4 slots with existing data
-    const etiquetaPhoto = photos.find(p => p.photo_type === 'etiqueta')
-    const comprobantePhoto = photos.find(p => p.photo_type === 'comprobante')
-    const adicionales = photos.filter(p => p.photo_type === 'documento_adicional')
+    const etiquetaFile = files.find(f => f.category === 'etiqueta')
+    const comprobanteFile = files.find(f => f.category === 'comprobante')
+    const adicionales = files.filter(f => f.category === 'documento_adicional')
 
     const slots: FileSlot[] = [
         {
             key: 'etiqueta',
-            photo_type: 'etiqueta',
+            category: 'etiqueta',
             label: 'Foto de etiqueta',
             icon: '🏷️',
-            description: 'Foto de la etiqueta del paquete (para extracción IA)',
-            existing: etiquetaPhoto,
+            description: 'Foto de la etiqueta del paquete',
+            existing: etiquetaFile,
         },
         {
             key: 'comprobante',
-            photo_type: 'comprobante',
+            category: 'comprobante',
             label: 'Comprobante de envío',
             icon: '🧾',
-            description: 'Comprobante del despacho (para matching IA)',
-            existing: comprobantePhoto,
+            description: 'Comprobante del despacho',
+            existing: comprobanteFile,
         },
         {
             key: 'adicional_1',
-            photo_type: 'documento_adicional',
+            category: 'documento_adicional',
             label: 'Documento adicional 1',
             icon: '📄',
             description: 'Remito, factura, u otro documento',
@@ -83,7 +82,7 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
         },
         {
             key: 'adicional_2',
-            photo_type: 'documento_adicional',
+            category: 'documento_adicional',
             label: 'Documento adicional 2',
             icon: '📄',
             description: 'Foto de local cerrado, otro doc, etc.',
@@ -96,7 +95,7 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
         setError('')
 
         const fileExt = file.name.split('.').pop()
-        const fileName = `${shipmentId}/${slot.photo_type}_${Date.now()}.${fileExt}`
+        const fileName = `${shipmentId}/${slot.category}_${Date.now()}.${fileExt}`
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -112,26 +111,30 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
             return
         }
 
-        // Get public URL
+        // Get public URL (though we primarily store path now, we might want to store full path/url)
+        // Table expects 'storage_path'. We can store the full public URL or just the path.
+        // Migration copied 'photo_url'. Let's store the full public URL to be consistent with migration
+        // or cleaner: store relative path if we wanted, but existing code used full URL.
+        // The prompt said: "storage_path text".
+        // Let's store the Public URL for convenience of display.
         const { data: urlData } = supabase.storage
             .from('shipment-files')
             .getPublicUrl(fileName)
 
-        // If replacing existing, delete old record first
+        // If replacing existing, delete old record first?
+        // Logic: if slot is occupied, we delete the OLD file record + file?
+        // For 'adicional', it handles 2 slots.
         if (slot.existing) {
-            await supabase
-                .from('shipment_photos')
-                .delete()
-                .eq('id', slot.existing.id)
+            await handleDelete(slot.existing) // Delete old one cleanly
         }
 
-        // Insert photo record
+        // Insert file record
         const { error: insertError } = await supabase
-            .from('shipment_photos')
+            .from('shipment_files')
             .insert({
                 shipment_id: shipmentId,
-                photo_url: urlData.publicUrl,
-                photo_type: slot.photo_type,
+                storage_path: urlData.publicUrl, // Using public URL as 'storage_path' for now
+                category: slot.category,
             })
 
         if (insertError) {
@@ -141,12 +144,14 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
         }
 
         setUploading(null)
-        fetchPhotos()
+        fetchFiles()
     }
 
-    async function handleDelete(photo: ShipmentPhoto) {
+    async function handleDelete(fileRec: ShipmentFile) {
         // Extract path from URL for storage deletion
-        const urlParts = photo.photo_url.split('/shipment-files/')
+        // URL is: .../shipment-files/FOLDER/FILE...
+        // We need 'FOLDER/FILE'
+        const urlParts = fileRec.storage_path.split('/shipment-files/')
         if (urlParts[1]) {
             await supabase.storage
                 .from('shipment-files')
@@ -154,11 +159,11 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
         }
 
         await supabase
-            .from('shipment_photos')
+            .from('shipment_files')
             .delete()
-            .eq('id', photo.id)
+            .eq('id', fileRec.id)
 
-        fetchPhotos()
+        fetchFiles()
     }
 
     function isImage(url: string) {
@@ -182,8 +187,8 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
                         <div
                             key={slot.key}
                             className={`rounded-lg border p-3 transition-all ${slot.existing
-                                    ? 'border-emerald-500/30 bg-emerald-500/5'
-                                    : 'border-zinc-800 bg-zinc-800/30'
+                                ? 'border-emerald-500/30 bg-emerald-500/5'
+                                : 'border-zinc-800 bg-zinc-800/30'
                                 }`}
                         >
                             {/* Header */}
@@ -199,12 +204,12 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
                             {slot.existing ? (
                                 <div className="space-y-2">
                                     {/* Preview */}
-                                    {isImage(slot.existing.photo_url) ? (
-                                        <a href={slot.existing.photo_url} target="_blank" rel="noopener noreferrer">
+                                    {isImage(slot.existing.storage_path) ? (
+                                        <a href={slot.existing.storage_path} target="_blank" rel="noopener noreferrer">
                                             <div className="relative group">
                                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                                 <img
-                                                    src={slot.existing.photo_url}
+                                                    src={slot.existing.storage_path}
                                                     alt={slot.label}
                                                     className="w-full h-24 object-cover rounded-md border border-zinc-700 group-hover:brightness-110 transition"
                                                 />
@@ -215,7 +220,7 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
                                         </a>
                                     ) : (
                                         <a
-                                            href={slot.existing.photo_url}
+                                            href={slot.existing.storage_path}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="block px-3 py-2 rounded-md bg-zinc-800 border border-zinc-700 text-xs text-emerald-400 hover:bg-zinc-700 transition"
@@ -238,11 +243,6 @@ export default function ShipmentFiles({ shipmentId, readOnly = false }: Shipment
                                             </Button>
                                         )}
                                     </div>
-                                    {slot.existing.processed && (
-                                        <div className="text-[10px] text-emerald-400 flex items-center gap-1">
-                                            ✅ Procesado por IA
-                                        </div>
-                                    )}
                                 </div>
                             ) : (
                                 /* Upload area */

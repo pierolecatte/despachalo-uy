@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -83,9 +83,8 @@ export default function DepartmentsPage() {
                             </TableRow>
                         ) : (
                             departments.map((dept, i) => (
-                                <>
+                                <Fragment key={dept.id}>
                                     <TableRow
-                                        key={dept.id}
                                         className="border-zinc-800 hover:bg-zinc-800/30 cursor-pointer"
                                         onClick={() => setExpanded(expanded === dept.id ? null : dept.id)}
                                     >
@@ -105,7 +104,7 @@ export default function DepartmentsPage() {
                                         </TableCell>
                                     </TableRow>
                                     {expanded === dept.id && dept.cities && dept.cities.length > 0 && (
-                                        <TableRow key={`${dept.id}-cities`} className="border-zinc-800">
+                                        <TableRow className="border-zinc-800">
                                             <TableCell colSpan={4} className="bg-zinc-800/20 py-3 px-8">
                                                 <div className="flex flex-wrap gap-2">
                                                     {dept.cities.map(city => (
@@ -117,7 +116,7 @@ export default function DepartmentsPage() {
                                             </TableCell>
                                         </TableRow>
                                     )}
-                                </>
+                                </Fragment>
                             ))
                         )}
                     </TableBody>

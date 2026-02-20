@@ -442,7 +442,60 @@ INSERT INTO departments (name, code) VALUES
     ('Tacuarembó', 'TA'),
     ('Treinta y Tres', 'TT');
 
--- 7. ORGANIZACIÓN ADMIN Y SUPER ADMIN INICIAL
+-- 7. ETIQUETAS
+-- =====================================================
+
+-- Perfiles de etiquetas (uno por remitente, o genérico)
+CREATE TABLE label_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    org_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Configuración por tamaño (3 por perfil: chico, mediano, grande)
+CREATE TABLE label_configs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    profile_id UUID NOT NULL REFERENCES label_profiles(id) ON DELETE CASCADE,
+    size package_size NOT NULL,
+    width_mm DECIMAL(6,2) NOT NULL DEFAULT 100,
+    height_mm DECIMAL(6,2) NOT NULL DEFAULT 150,
+    show_sender_name BOOLEAN NOT NULL DEFAULT TRUE,
+    show_sender_address BOOLEAN NOT NULL DEFAULT TRUE,
+    show_sender_phone BOOLEAN NOT NULL DEFAULT TRUE,
+    show_recipient_name BOOLEAN NOT NULL DEFAULT TRUE,
+    show_recipient_phone BOOLEAN NOT NULL DEFAULT TRUE,
+    show_recipient_address BOOLEAN NOT NULL DEFAULT TRUE,
+    show_recipient_city BOOLEAN NOT NULL DEFAULT TRUE,
+    show_cadeteria BOOLEAN NOT NULL DEFAULT TRUE,
+    show_agencia BOOLEAN NOT NULL DEFAULT TRUE,
+    show_description BOOLEAN NOT NULL DEFAULT TRUE,
+    show_logo BOOLEAN NOT NULL DEFAULT TRUE,
+    show_qr BOOLEAN NOT NULL DEFAULT TRUE,
+    qr_position TEXT NOT NULL DEFAULT 'top_right',
+    qr_size_px INT NOT NULL DEFAULT 80,
+    font_family TEXT NOT NULL DEFAULT 'helvetica',
+    font_size_title DECIMAL(4,1) NOT NULL DEFAULT 12,
+    font_size_content DECIMAL(4,1) NOT NULL DEFAULT 10,
+    margin_top DECIMAL(6,2) NOT NULL DEFAULT 8,
+    margin_bottom DECIMAL(6,2) NOT NULL DEFAULT 8,
+    margin_left DECIMAL(6,2) NOT NULL DEFAULT 8,
+    margin_right DECIMAL(6,2) NOT NULL DEFAULT 8,
+    UNIQUE(profile_id, size)
+);
+
+-- Perfil por defecto
+INSERT INTO label_profiles (name, is_default) VALUES ('Perfil por defecto', TRUE);
+
+INSERT INTO label_configs (profile_id, size, width_mm, height_mm)
+SELECT id, 'grande'::package_size, 150, 200 FROM label_profiles WHERE is_default = TRUE
+UNION ALL
+SELECT id, 'mediano'::package_size, 100, 150 FROM label_profiles WHERE is_default = TRUE
+UNION ALL
+SELECT id, 'chico'::package_size, 80, 120 FROM label_profiles WHERE is_default = TRUE;
+
+-- 8. ORGANIZACIÓN ADMIN Y SUPER ADMIN INICIAL
 -- =====================================================
 -- NOTA: Después de crear tu cuenta en el sistema, ejecutar lo siguiente
 -- reemplazando 'TU_AUTH_USER_ID' con el UUID de tu usuario en auth.users
@@ -458,3 +511,9 @@ INSERT INTO departments (name, code) VALUES
 --     'Tu Nombre',
 --     'super_admin'
 -- );
+
+-- 9. ACTUALIZACIÓN: CAMPOS DE FLETE (2026-02-18)
+-- =====================================================
+ALTER TABLE shipments 
+ADD COLUMN is_freight_paid BOOLEAN DEFAULT false,
+ADD COLUMN freight_amount NUMERIC(10,2);
